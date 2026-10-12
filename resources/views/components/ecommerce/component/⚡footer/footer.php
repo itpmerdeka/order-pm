@@ -2,8 +2,8 @@
 
 use App\Models\Content\FooterGroup;
 use App\Models\Setting\Setting;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 

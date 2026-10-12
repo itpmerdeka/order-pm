@@ -35,8 +35,7 @@ new class extends Component
     public function mount(
         PaymentGatewayManager $paymentGatewayManager,
         PaymentFeeCalculator $paymentFeeCalculator,
-    ): void
-    {
+    ): void {
         $token = request()->query('token');
         $accessToken = is_string($token) ? $token : '';
 
@@ -217,8 +216,7 @@ new class extends Component
     private function loadPaymentMethods(
         PaymentGatewayManager $paymentGatewayManager,
         PaymentFeeCalculator $paymentFeeCalculator,
-    ): void
-    {
+    ): void {
         try {
             $amount = (int) round((float) $this->order->total);
 
@@ -240,8 +238,7 @@ new class extends Component
     private function loadPersistedPaymentMethod(
         PaymentGatewayManager $paymentGatewayManager,
         PaymentFeeCalculator $paymentFeeCalculator,
-    ): void
-    {
+    ): void {
         try {
             $driver = PaymentGatewayDriver::tryFrom((string) $this->payment?->driver);
 
@@ -271,8 +268,7 @@ new class extends Component
         PaymentMethodData $method,
         int $amount,
         PaymentFeeCalculator $paymentFeeCalculator,
-    ): array
-    {
+    ): array {
         $estimatedFee = $paymentFeeCalculator->calculateCustomerFee($method, $amount);
         $isAvailable = ($method->minimumAmount === null || $amount >= $method->minimumAmount)
             && ($method->maximumAmount === null || $amount <= $method->maximumAmount);
