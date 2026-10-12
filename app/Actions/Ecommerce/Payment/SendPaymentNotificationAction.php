@@ -36,7 +36,7 @@ final class SendPaymentNotificationAction
 
         $order ??= $this->lockedOrder($payment);
 
-        if ($order === null) {
+        if ($order === null || ($status !== PaymentStatus::Paid && $order->status)) {
             return;
         }
 
@@ -96,7 +96,7 @@ final class SendPaymentNotificationAction
 
                     $storedOrder = Order::query()->with('user')->find($orderId);
 
-                    if ($storedOrder === null) {
+                    if ($storedOrder === null || ($status !== PaymentStatus::Paid && $storedOrder->status)) {
                         return;
                     }
 

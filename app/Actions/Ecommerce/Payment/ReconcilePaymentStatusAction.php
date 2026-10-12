@@ -59,7 +59,7 @@ final class ReconcilePaymentStatusAction
 
             $lockedPayment->update($attributes);
 
-            if ($lockedOrder === null) {
+            if ($lockedOrder === null || $lockedOrder->status) {
                 return $lockedPayment->refresh();
             }
 

@@ -10,6 +10,7 @@ use App\Models\Order\Order;
 use App\Models\Order\OrderShop;
 use App\Models\Order\OrderShopShipment;
 use App\Models\Payment\Payment;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +19,7 @@ use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Testing\TestResponse;
 use Symfony\Component\Process\Process;
 use Tests\TestCase;
@@ -792,6 +794,114 @@ it('makes paid win over stale failed or cancelled Paywuz callbacks', function (s
     'failed then paid' => ['failed', 'success', true],
     'paid then cancelled' => ['success', 'cancelled', false],
     'cancelled then paid' => ['cancelled', 'success', true],
+]);
+
+it('keeps a paid QRIS order unchanged when an older VA callback arrives', function (
+    PaymentGatewayDriver $driver,
+    string $providerStatus,
+    ?string $terminalStatus,
+) {
+    Schema::table('payments', function (Blueprint $table): void {
+        $table->dropUnique('payments_payable_unique');
+    });
+
+    $olderPayment = null;
+
+    try {
+        config([
+            'midtrans.server_key' => 'midtrans-test-secret',
+            'payment.drivers.paywuz.api_key' => 'paywuz-test-key',
+        ]);
+
+        $order = Order::factory()->create(['total' => 100_000]);
+        $olderPayment = Payment::factory()->create([
+            'driver' => $driver->value,
+            'payable_type' => Order::class,
+            'payable_id' => $order->getKey(),
+            'amount' => 100_000,
+            'fee' => 4_500,
+            'total' => 104_500,
+            'paid_at' => null,
+        ]);
+        $qrisPayment = Payment::factory()->create([
+            'driver' => $driver->value,
+            'payable_type' => Order::class,
+            'payable_id' => $order->getKey(),
+            'payment_type' => 'qris',
+            'channel' => 'qris',
+            'amount' => 100_000,
+            'fee' => 700,
+            'total' => 100_700,
+            'paid_at' => null,
+        ]);
+        Mail::fake();
+
+        $postCallback = function (Payment $payment, string $status, string $delivery) use ($driver): TestResponse {
+            if ($driver === PaymentGatewayDriver::Paywuz) {
+                fakePaywuzStatus($payment, $status);
+                $rawBody = json_encode(['orderId' => $payment->order_id, 'status' => $status], JSON_THROW_ON_ERROR);
+                $event = $status === 'success' ? 'transaction.paid' : 'transaction.'.$status;
+
+                return postRawPaywuzCallback($this, $rawBody, paywuzSignature($rawBody), $event, $delivery);
+            }
+
+            Http::fake([
+                'https://api.sandbox.midtrans.com/v2/'.$payment->order_id.'/status' => Http::response([
+                    'transaction_id' => $payment->transaction_id,
+                    'order_id' => $payment->order_id,
+                    'gross_amount' => (string) $payment->total,
+                    'payment_type' => $payment->payment_type,
+                    'transaction_status' => $status,
+                    'va_numbers' => [['bank' => 'bca', 'va_number' => $payment->account_number]],
+                ]),
+            ]);
+            $payload = [
+                'order_id' => $payment->order_id,
+                'status_code' => '200',
+                'gross_amount' => (string) $payment->total,
+                'transaction_status' => $status,
+            ];
+            $payload['signature_key'] = hash(
+                'sha512',
+                $payload['order_id'].$payload['status_code'].$payload['gross_amount'].'midtrans-test-secret',
+            );
+
+            return $this->postJson(route('api.v1.midtrans.callback'), $payload);
+        };
+
+        $paidStatus = $driver === PaymentGatewayDriver::Paywuz ? 'success' : 'settlement';
+        $postCallback($qrisPayment, $paidStatus, 'qris-paid')->assertOk();
+        $paidAt = $qrisPayment->refresh()->paid_at?->copy();
+
+        expect($order->refresh()->status)->toBeTrue()
+            ->and((float) $order->payment_fee)->toBe(700.0);
+
+        $postCallback($olderPayment, $providerStatus, 'older-va-callback')->assertOk();
+        $postCallback($olderPayment, $providerStatus, 'older-va-callback')->assertOk();
+
+        expect($order->refresh()->status)->toBeTrue()
+            ->and((float) $order->payment_fee)->toBe(700.0)
+            ->and($qrisPayment->refresh()->paid_at?->equalTo($paidAt))->toBeTrue()
+            ->and($olderPayment->refresh()->paid_at)->toBeNull()
+            ->and($olderPayment->account_code)->toBe($terminalStatus === null ? null : 'provider-status:'.$terminalStatus);
+
+        Mail::assertSent(OrderPaid::class, 1);
+        Mail::assertNotSent(OrderPaymentFailed::class);
+    } finally {
+        $olderPayment?->delete();
+
+        Schema::table('payments', function (Blueprint $table): void {
+            $table->unique(['payable_type', 'payable_id'], 'payments_payable_unique');
+        });
+    }
+})->with([
+    'Paywuz pending' => [PaymentGatewayDriver::Paywuz, 'settlement', null],
+    'Paywuz failed' => [PaymentGatewayDriver::Paywuz, 'failed', 'failed'],
+    'Paywuz cancelled' => [PaymentGatewayDriver::Paywuz, 'cancelled', 'cancelled'],
+    'Midtrans pending' => [PaymentGatewayDriver::Midtrans, 'pending', null],
+    'Midtrans failed' => [PaymentGatewayDriver::Midtrans, 'failure', 'failed'],
+    'Midtrans cancelled' => [PaymentGatewayDriver::Midtrans, 'cancel', 'cancelled'],
+    'Midtrans expired' => [PaymentGatewayDriver::Midtrans, 'expire', 'expired'],
 ]);
 
 it('rejects a Paywuz paid callback when authoritative transaction data mismatches local principal', function () {

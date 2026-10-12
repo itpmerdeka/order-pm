@@ -2,6 +2,7 @@
 
 use App\Actions\Ecommerce\Payment\ReconcilePaymentStatusAction;
 use App\Actions\Ecommerce\Payment\RefreshPaymentStatusAction;
+use App\Actions\Ecommerce\Payment\SendPaymentNotificationAction;
 use App\Data\Payments\PaymentTransactionData;
 use App\Enums\PaymentGatewayDriver;
 use App\Enums\PaymentMethod;
@@ -338,6 +339,33 @@ it('prevents provider terminal states from regressing to pending while allowing 
 
     Mail::assertSent(OrderPaymentFailed::class, 1);
     Mail::assertSent(OrderPaid::class, 1);
+})->with([
+    'failed' => PaymentStatus::Failed,
+    'cancelled' => PaymentStatus::Cancelled,
+    'expired' => PaymentStatus::Expired,
+]);
+
+it('suppresses a failure notification if the order becomes paid before the transaction commits', function (
+    PaymentStatus $terminalStatus,
+) {
+    $order = Order::factory()->create();
+    $payment = Payment::factory()->create([
+        'payable_type' => Order::class,
+        'payable_id' => $order->getKey(),
+        'account_code' => 'provider-status:'.$terminalStatus->value,
+        'paid_at' => null,
+    ]);
+    Mail::fake();
+
+    DB::transaction(function () use ($payment, $order): void {
+        app(SendPaymentNotificationAction::class)->handle($payment, $order);
+
+        Mail::assertNothingSent();
+        $order->update(['status' => true]);
+    });
+
+    expect($order->refresh()->status)->toBeTrue();
+    Mail::assertNotSent(OrderPaymentFailed::class);
 })->with([
     'failed' => PaymentStatus::Failed,
     'cancelled' => PaymentStatus::Cancelled,
