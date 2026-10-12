@@ -5,6 +5,8 @@ use App\Models\Spatie\Permission;
 use App\Models\User;
 use App\Services\CourierSettingsService;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
 use Livewire\Livewire;
 
@@ -23,7 +25,7 @@ beforeEach(function () {
 
 it('loads the selected courier and saves active and inactive statuses', function () {
     $component = Livewire::actingAs($this->actor)->test('cms.shipping.courier.create-update')
-        ->dispatch('set-action', code: 'gojek')->assertSet('name', 'GoSend')->assertSet('enabled', 0)
+        ->dispatch('set-action', code: 'gojek')->assertSet('name', 'GoSend')->assertSet('enabled', 1)
         ->assertSee('wire:model.number="enabled"', false)
         ->set('enabled', '1')->call('submit')->assertHasNoErrors()->assertDispatched('reset-parent-page');
     expect(app(CourierSettingsService::class)->enabledCodes())->toContain('gojek');
@@ -36,6 +38,35 @@ it('locks the selected courier identity', function () {
     $component = Livewire::actingAs($this->actor)->test('cms.shipping.courier.create-update')
         ->dispatch('set-action', code: 'gojek');
     expect(fn () => $component->set('code', 'grab'))->toThrow(CannotUpdateLockedPropertyException::class);
+});
+
+it('uploads a logo and reloads its preview without leaking it to another courier', function () {
+    Storage::fake('public');
+    $component = Livewire::actingAs($this->actor)->test('cms.shipping.courier.create-update')
+        ->dispatch('set-action', code: 'gojek')
+        ->assertSet('oldImage', asset(CourierSettingsService::DEFAULT_LOGOS['gojek']))
+        ->assertSee('wire:model="image"', false)
+        ->set('image', UploadedFile::fake()->image('gojek.png'))
+        ->call('submit')->assertHasNoErrors()->assertDispatched('reset-parent-page');
+    $path = Setting::query()->where('key', CourierSettingsService::KEY)->sole()->data['logos']['gojek'];
+    Storage::disk('public')->assertExists($path);
+    $component->dispatch('set-action', code: 'gojek')->assertSet('image', null)
+        ->assertSet('oldImage', Storage::disk('public')->url($path))
+        ->set('image', UploadedFile::fake()->image('unsaved.png'))
+        ->dispatch('set-action', code: 'grab')->assertSet('image', null)
+        ->assertSet('oldImage', asset(CourierSettingsService::DEFAULT_LOGOS['grab']))
+        ->call('submit')->assertHasNoErrors();
+    expect(Setting::query()->where('key', CourierSettingsService::KEY)->sole()->data['logos'])
+        ->toBe(['gojek' => $path]);
+});
+
+it('validates oversized courier uploads', function () {
+    Storage::fake('public');
+    Livewire::actingAs($this->actor)->test('cms.shipping.courier.create-update')
+        ->dispatch('set-action', code: 'gojek')
+        ->set('image', UploadedFile::fake()->image('logo.png')->size(2049))
+        ->call('submit')->assertHasErrors(['image' => 'max']);
+    expect(Setting::query()->count())->toBe(0);
 });
 
 it('rejects submission before selecting a courier', function () {

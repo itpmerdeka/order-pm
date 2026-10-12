@@ -8,8 +8,18 @@
         <form class="space-y-6" wire:submit.prevent="submit">
             <div>
                 <flux:heading size="lg">Update Courier</flux:heading>
-                <flux:text class="mt-2">Update the courier availability below.</flux:text>
+                <flux:text class="mt-2">Update the courier logo and availability below.</flux:text>
             </div>
+
+            <flux:field>
+                <flux:label>Logo</flux:label>
+                <flux:text>Optional courier logo. Accepted formats: JPEG, PNG. Max size: 2MB.</flux:text>
+                <div class="max-w-40 rounded-lg bg-white p-3">
+                    <x-file-preview :file="$image" :form_file="$oldImage" />
+                </div>
+                <x-file-upload model="image" accept="image/jpeg, image/png, .jpg, .jpeg, .png" />
+                <flux:error name="image" />
+            </flux:field>
 
             <flux:field>
                 <flux:label>Name</flux:label>

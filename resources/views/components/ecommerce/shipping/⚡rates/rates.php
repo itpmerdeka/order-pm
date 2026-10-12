@@ -78,6 +78,13 @@ new class extends Component
             : $this->destinationLatitude !== null && $this->destinationLongitude !== null;
     }
 
+    /** @return array<string, string> */
+    #[Computed]
+    public function courierLogoUrls(): array
+    {
+        return app(CourierSettingsService::class)->logoUrls();
+    }
+
     private function resolveAuthDestination(): void
     {
         $location = Location::where('user_id', auth()->id())

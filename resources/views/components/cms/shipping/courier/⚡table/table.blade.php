@@ -70,7 +70,16 @@
                             </flux:menu>
                         </flux:dropdown>
                     </flux:table.cell>
-                    <flux:table.cell>{{ $d['name'] }}</flux:table.cell>
+                    <flux:table.cell>
+                        <div class="flex items-center gap-3">
+                            @if($d['logo_url'])
+                                <div class="flex h-10 w-16 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-white p-2">
+                                    <img src="{{ $d['logo_url'] }}" alt="Logo {{ $d['name'] }}" class="h-full w-full object-contain" loading="lazy" />
+                                </div>
+                            @endif
+                            <span>{{ $d['name'] }}</span>
+                        </div>
+                    </flux:table.cell>
                     <flux:table.cell>{{ $d['code'] }}</flux:table.cell>
                     <flux:table.cell>{{ $d['services'] }}</flux:table.cell>
                     <flux:table.cell>

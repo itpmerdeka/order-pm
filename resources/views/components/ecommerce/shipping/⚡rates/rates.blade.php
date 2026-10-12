@@ -91,20 +91,26 @@
                         $name    = ($rate['courier_name'] ?? '') . ' ' . ($rate['courier_service_name'] ?? '');
                         $etd     = $rate['duration'] ?? ($rate['etd'] ?? '-');
                         $isSelected = $selectedCourierCode === $code && $selectedServiceCode === $service;
+                        $logoUrl = $this->courierLogoUrls[$code] ?? null;
                     @endphp
                     <button
                         wire:key="rate-{{ $shopId }}-{{ $code }}-{{ $service }}"
                         wire:click="selectRate('{{ $code }}', '{{ $service }}', {{ $price }}, '{{ addslashes($name) }}', '{{ addslashes($etd) }}')"
                         class="w-full border rounded-xl p-3 cursor-pointer flex items-center justify-between transition text-left {{ $isSelected ? 'border-gray-500 bg-gray-50' : 'hover:border-gray-300 bg-white' }}"
                     >
-                        <div class="flex items-center gap-3">
+                        <div class="flex min-w-0 items-center gap-2 sm:gap-3">
                             {{-- Radio indicator --}}
                             <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 {{ $isSelected ? 'border-gray-500' : 'border-gray-300' }}">
                                 @if($isSelected)
                                     <div class="w-2 h-2 rounded-full bg-gray-500"></div>
                                 @endif
                             </div>
-                            <div>
+                            @if($logoUrl)
+                                <div class="flex h-9 w-12 shrink-0 items-center justify-center rounded-md bg-white p-1 sm:w-16">
+                                    <img src="{{ $logoUrl }}" alt="Logo {{ $rate['courier_name'] ?? strtoupper($code) }}" class="h-full w-full object-contain" loading="lazy" />
+                                </div>
+                            @endif
+                            <div class="min-w-0">
                                 <div class="font-semibold text-gray-900 text-sm">{{ $name }}</div>
                                 <div class="text-xs text-gray-500">
                                     @if(is_array($etd))
@@ -125,6 +131,9 @@
             @if($selectedCourierCode)
                 <div class="mt-3 flex items-center gap-2 p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800">
                     <flux:icon.check-circle class="w-4 h-4 text-gray-600 shrink-0" />
+                    @if($this->courierLogoUrls[$selectedCourierCode] ?? null)
+                        <img src="{{ $this->courierLogoUrls[$selectedCourierCode] }}" alt="Logo {{ strtoupper($selectedCourierCode) }}" class="h-6 w-12 shrink-0 rounded bg-white p-1 object-contain" />
+                    @endif
                     <span><span class="font-bold">{{ $selectedName }}</span> — Rp{{ number_format($selectedPrice, 0, ',', '.') }}</span>
                 </div>
             @endif

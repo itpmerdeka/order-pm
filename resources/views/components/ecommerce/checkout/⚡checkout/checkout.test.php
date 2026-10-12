@@ -647,24 +647,25 @@ it('selects Biteship pricing and persists its shipping details through checkout'
     $product = Product::factory()->for($shop)->create();
     $productFlat = ProductFlat::factory()->for($product)->create(['shop_id' => $shop->id]);
 
-    $this->mock(BiteshipService::class)->shouldReceive('getRates')->once()
+    $this->mock(BiteshipService::class)->shouldReceive('getRates')->twice()
         ->with(Mockery::on(fn (array $payload): bool => $payload['origin_latitude'] === -6.2 && $payload['destination_longitude'] === 106.81
             && ! isset($payload['origin_area_id'], $payload['destination_area_id'])))
         ->andReturn([
-        'pricing' => [[
-            'courier_code' => 'jne',
-            'courier_service_code' => 'reg',
-            'courier_name' => 'JNE',
-            'courier_service_name' => 'Regular',
-            'price' => 23000,
-            'duration' => '2-3 days',
-        ]],
-    ]);
+            'pricing' => [[
+                'courier_code' => 'jne',
+                'courier_service_code' => 'reg',
+                'courier_name' => 'JNE',
+                'courier_service_name' => 'Regular',
+                'price' => 23000,
+                'duration' => '2-3 days',
+            ]],
+        ]);
 
     $shipping = Livewire::actingAs($user)
         ->test('ecommerce.shipping.rates', ['shopId' => $shop->id, 'items' => [$productFlat->id => 1]])
         ->call('fetchRates')
         ->assertSee('JNE Regular')
+        ->assertSee('images/courier-jne.svg', false)
         ->call('selectRate', 'jne', 'reg', 1, 'Fake', 'Instant')
         ->assertSet('selectedName', 'JNE Regular')
         ->assertSet('selectedEtd', '2-3 days');

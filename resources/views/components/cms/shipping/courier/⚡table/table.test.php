@@ -4,6 +4,7 @@ use App\Models\Setting\Setting;
 use App\Models\Spatie\Permission;
 use App\Models\User;
 use App\Services\CourierSettingsService;
+use GuzzleHttp\Promise\PromiseInterface;
 use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
 
@@ -15,8 +16,9 @@ beforeEach(function () {
         ['courier_code' => 'jne', 'courier_name' => 'JNE', 'courier_service_name' => 'Regular'],
         ['courier_code' => 'gojek', 'courier_name' => 'GoSend', 'courier_service_name' => 'Instant'],
         ['courier_code' => 'grab', 'courier_name' => 'GrabExpress', 'courier_service_name' => 'Instant'],
+        ['courier_code' => 'tiki', 'courier_name' => 'TIKI', 'courier_service_name' => 'Regular'],
     ];
-    Http::fake(fn (): \GuzzleHttp\Promise\PromiseInterface => Http::response(['couriers' => $this->couriers], $this->catalogStatus));
+    Http::fake(fn (): PromiseInterface => Http::response(['couriers' => $this->couriers], $this->catalogStatus));
     $this->actor = User::factory()->create();
     foreach (['view', 'show', 'update'] as $ability) {
         $this->actor->givePermissionTo(Permission::findOrCreate($ability.Setting::class, 'api'));
@@ -40,6 +42,15 @@ it('saves the method and preserves the enabled courier selection', function () {
         ->assertHasNoErrors()->assertDispatched('toast');
     expect(app(CourierSettingsService::class)->enabledCodes())->toBe(['gojek', 'grab']);
     Livewire::test('cms.shipping.courier.table')->assertSet('rateMethod', 'area_id');
+});
+
+it('renders uploaded and default courier logos in the catalog', function () {
+    Setting::query()->create(['key' => CourierSettingsService::KEY, 'data' => ['logos' => ['gojek' => 'shipping/couriers/gojek.png']]]);
+    Livewire::actingAs($this->actor)->test('cms.shipping.courier.table')
+        ->assertSee('/storage/shipping/couriers/gojek.png', false)
+        ->assertSee(asset(CourierSettingsService::DEFAULT_LOGOS['jne']), false)
+        ->assertSee(asset(CourierSettingsService::DEFAULT_LOGOS['grab']), false)
+        ->assertSee('Logo GoSend')->assertSee('Logo JNE');
 });
 
 it('validates the rate method before saving', function () {

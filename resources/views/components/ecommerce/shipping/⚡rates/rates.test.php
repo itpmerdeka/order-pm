@@ -6,6 +6,7 @@ use App\Models\Location\Location;
 use App\Models\Setting\Setting;
 use App\Models\User;
 use App\Services\CourierSettingsService;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
 use Livewire\Livewire;
 
@@ -72,6 +73,26 @@ it('rejects unknown shipping services', function () {
         ->assertNotDispatched('shipping-rate-selected');
 });
 
+it('shows courier logos beside checkout rates and the selected service', function () {
+    Setting::query()->create(['key' => CourierSettingsService::KEY, 'data' => ['logos' => ['gojek' => 'shipping/couriers/custom.png']]]);
+    $rates = collect(['jne', 'jnt', 'gojek', 'grab', 'tiki'])->map(fn (string $code): array => [
+        'courier_code' => $code, 'courier_service_code' => 'reg', 'price' => 15000,
+        'courier_name' => strtoupper($code), 'courier_service_name' => 'Regular', 'duration' => '2-3 days',
+    ])->all();
+    mock(GetShippingRatesAction::class)->shouldReceive('handle')->once()->andReturn($rates);
+    Livewire::test('ecommerce.shipping.rates', ['shopId' => 1, 'items' => [1 => 1]])
+        ->call('fetchRates')
+        ->assertSee(asset(CourierSettingsService::DEFAULT_LOGOS['jne']), false)
+        ->assertSee(asset(CourierSettingsService::DEFAULT_LOGOS['jnt']), false)
+        ->assertSee(asset(CourierSettingsService::DEFAULT_LOGOS['grab']), false)
+        ->assertSee('/storage/shipping/couriers/custom.png', false)
+        ->assertDontSee(asset(CourierSettingsService::DEFAULT_LOGOS['gojek']), false)
+        ->assertSee('TIKI Regular')
+        ->call('selectRate', 'gojek', 'reg', 15000, 'GOJEK Regular', '2-3 days')
+        ->assertSeeHtml('alt="Logo GOJEK"')
+        ->assertSet('selectedCourierCode', 'gojek');
+});
+
 it('locks shipping data against client hydration', function (string $property, mixed $value) {
     expect(fn () => Livewire::test('ecommerce.shipping.rates', ['shopId' => 1, 'items' => [1 => 2]])->set($property, $value))
         ->toThrow(CannotUpdateLockedPropertyException::class);
@@ -113,5 +134,5 @@ it('requires an area in area mode even when destination coordinates exist', func
 it('rejects selecting an address belonging to another user', function () {
     $location = Location::factory()->create();
     expect(fn () => Livewire::actingAs(User::factory()->create())->test('ecommerce.shipping.rates', ['shopId' => 1])
-        ->call('onAddressSelected', $location->id))->toThrow(\Illuminate\Database\Eloquent\ModelNotFoundException::class);
+        ->call('onAddressSelected', $location->id))->toThrow(ModelNotFoundException::class);
 });
